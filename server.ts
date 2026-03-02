@@ -1,3 +1,4 @@
+import "dotenv/config";
 import express from "express";
 import { createServer as createViteServer } from "vite";
 import Database from "better-sqlite3";
@@ -62,7 +63,7 @@ async function startServer() {
         Analyze the following business description and growth goal:
         "${query_text}"
         
-        Provide a highly professional, structured response in JSON format matching this exact schema:
+        Keep your reasoning concise. Provide a highly professional, structured response in JSON format matching this exact schema:
         {
           "businessModelAnalysis": "Professional breakdown of the business model",
           "recommendedStack": [
@@ -113,8 +114,21 @@ async function startServer() {
         throw new Error("No API key provided. Please set OPENROUTER_API_KEY.");
       }
 
+      // Remove deepseek thinking block
+      const thinkMatch = resultText.match(/<think>[\s\S]*?<\/think>/);
+      if (thinkMatch) {
+        resultText = resultText.replace(thinkMatch[0], '');
+      }
+
       const cleanedText = resultText.replace(/\`\`\`json/g, '').replace(/\`\`\`/g, '').trim();
-      const blueprint = JSON.parse(cleanedText);
+
+      let blueprint;
+      try {
+        blueprint = JSON.parse(cleanedText);
+      } catch (err) {
+        console.error("JSON parsing error:", err, "Cleaned text:", cleanedText);
+        throw new Error("Failed to parse the AI architecture response into JSON.");
+      }
 
       // Basic lead scoring
       let lead_score = 0;
@@ -156,15 +170,15 @@ async function startServer() {
 
       // Check or create subscriber
       let subscriber = db.prepare("SELECT * FROM subscribers WHERE email = ?").get(email) as any;
-      
+
       if (!subscriber) {
         db.prepare("INSERT INTO subscribers (email, name, total_queries) VALUES (?, ?, 0)").run(email, name);
         subscriber = { email, name, total_queries: 0 };
       }
 
       if (subscriber.total_queries >= 3) {
-        return res.status(403).json({ 
-          error: "Limit reached", 
+        return res.status(403).json({
+          error: "Limit reached",
           message: "Need deeper help? Let's build it together.",
           limitReached: true
         });
@@ -172,7 +186,7 @@ async function startServer() {
 
       // Update query with email
       db.prepare("UPDATE marketing_queries SET email = ? WHERE id = ?").run(email, id);
-      
+
       // Increment queries
       db.prepare("UPDATE subscribers SET total_queries = total_queries + 1 WHERE email = ?").run(email);
 
@@ -196,12 +210,12 @@ async function startServer() {
     try {
       const stmt = db.prepare("SELECT * FROM marketing_queries ORDER BY lead_score DESC, created_at DESC");
       const queries = stmt.all();
-      
+
       const parsedQueries = queries.map((q: any) => ({
         ...q,
         ai_output: JSON.parse(q.ai_output)
       }));
-      
+
       res.json(parsedQueries);
     } catch (error) {
       console.error("Error fetching queries:", error);
@@ -233,7 +247,7 @@ async function startServer() {
         - Geography: ${formData.geography}
         - Growth Goal: ${formData.growthGoal}
         
-        Provide a highly professional, structured response in JSON format matching this exact schema:
+        Keep your reasoning concise. Provide a highly professional, structured response in JSON format matching this exact schema:
         {
           "businessModelAnalysis": "Professional breakdown of the business model",
           "funnelStrategy": "Diagram-style explanation in text format",
@@ -284,9 +298,22 @@ async function startServer() {
         throw new Error("No API key provided. Please set OPENROUTER_API_KEY.");
       }
 
+      // Remove deepseek thinking block
+      const thinkMatch = resultText.match(/<think>[\s\S]*?<\/think>/);
+      if (thinkMatch) {
+        resultText = resultText.replace(thinkMatch[0], '');
+      }
+
       // Clean up potential markdown formatting from the response
       const cleanedText = resultText.replace(/\`\`\`json/g, '').replace(/\`\`\`/g, '').trim();
-      const blueprint = JSON.parse(cleanedText);
+
+      let blueprint;
+      try {
+        blueprint = JSON.parse(cleanedText);
+      } catch (err) {
+        console.error("JSON parsing error:", err, "Cleaned text:", cleanedText);
+        throw new Error("Failed to parse the AI architecture response into JSON.");
+      }
 
       res.json(blueprint);
     } catch (error) {
@@ -299,7 +326,7 @@ async function startServer() {
   app.post("/api/blueprints", (req, res) => {
     try {
       const { id, business_name, input_data, ai_output } = req.body;
-      
+
       if (!id || !business_name || !input_data || !ai_output) {
         return res.status(400).json({ error: "Missing required fields" });
       }
@@ -308,9 +335,9 @@ async function startServer() {
         INSERT INTO marketing_blueprints (id, business_name, input_data, ai_output)
         VALUES (?, ?, ?, ?)
       `);
-      
+
       stmt.run(id, business_name, JSON.stringify(input_data), JSON.stringify(ai_output));
-      
+
       res.status(201).json({ success: true, id });
     } catch (error) {
       console.error("Error saving blueprint:", error);
@@ -323,14 +350,14 @@ async function startServer() {
     try {
       const stmt = db.prepare("SELECT * FROM marketing_blueprints ORDER BY created_at DESC");
       const blueprints = stmt.all();
-      
+
       // Parse JSON strings back to objects
       const parsedBlueprints = blueprints.map((bp: any) => ({
         ...bp,
         input_data: JSON.parse(bp.input_data),
         ai_output: JSON.parse(bp.ai_output)
       }));
-      
+
       res.json(parsedBlueprints);
     } catch (error) {
       console.error("Error fetching blueprints:", error);
