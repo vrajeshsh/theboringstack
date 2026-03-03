@@ -328,9 +328,12 @@ async function startServer() {
   });
 
   // Delete a blueprint
-  app.delete("/api/blueprints/:id", (req, res) => {
+  app.delete("/api/blueprints", (req, res) => {
     try {
-      const { id } = req.params;
+      const id = req.query.id as string;
+      if (!id) {
+        return res.status(400).json({ error: "ID is required" });
+      }
       const stmt = db.prepare("DELETE FROM marketing_blueprints WHERE id = ?");
       stmt.run(id);
       res.json({ success: true });

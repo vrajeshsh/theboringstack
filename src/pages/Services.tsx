@@ -10,7 +10,7 @@ export default function Services() {
   const [error, setError] = useState<string | null>(null);
   const [previewData, setPreviewData] = useState<any>(null);
   const [queryId, setQueryId] = useState<string | null>(null);
-
+  
   const [unlockName, setUnlockName] = useState('');
   const [unlockEmail, setUnlockEmail] = useState('');
   const [unlocking, setUnlocking] = useState(false);
@@ -95,9 +95,9 @@ export default function Services() {
   return (
     <div className="px-6 py-20 min-h-screen flex flex-col items-center justify-center">
       <div className="max-w-3xl w-full mx-auto">
-
+        
         {!previewData && !fullBlueprint && (
-          <motion.div
+          <motion.div 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             className="text-center"
@@ -108,7 +108,7 @@ export default function Services() {
             <p className="text-lg md:text-xl text-brand-ink/70 mb-12 max-w-2xl mx-auto font-medium">
               Get a free martech architecture according to your business needs powered by DeepSeek R1.
             </p>
-
+            
             <form onSubmit={handleSearch} className="relative mb-8 flex justify-center">
               <div className="relative flex min-w-[300px] max-w-full w-full md:w-auto shadow-sm hover:shadow-md transition-shadow duration-300 rounded-[2rem] bg-white border border-brand-ink/20 focus-within:border-brand-ink focus-within:ring-4 focus-within:ring-brand-ink/5">
                 <TextareaAutosize
@@ -170,7 +170,7 @@ export default function Services() {
                 ))}
               </div>
             </div>
-
+            
             {error && (
               <div className="mt-8 p-4 bg-red-50 border border-red-200 text-red-600 text-sm font-serif text-left">
                 {error}
@@ -190,26 +190,99 @@ export default function Services() {
           </motion.div>
         )}
 
-        {previewData && (
+        {previewData && !fullBlueprint && (
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
             className="w-full"
           >
             <div className="mb-12">
-              <h2 className="text-3xl font-serif mb-8 pb-4 border-b border-brand-ink/10">Strategic Growth Architecture</h2>
+              <h2 className="text-3xl font-serif mb-8 pb-4 border-b border-brand-ink/10">Architecture Preview</h2>
+              
+              <div className="mb-8">
+                <h3 className="text-xs uppercase tracking-widest font-bold text-brand-ink/50 mb-4">1. Business Model Analysis</h3>
+                <div className="prose prose-sm max-w-none text-brand-ink/80 font-serif leading-relaxed">
+                  <ReactMarkdown>{previewData.businessModelAnalysis}</ReactMarkdown>
+                </div>
+              </div>
 
-              <div className="prose prose-lg max-w-none text-brand-ink/80 font-serif leading-relaxed prose-headings:font-serif prose-headings:font-normal bg-white p-8 border border-brand-ink/10 shadow-sm">
-                <ReactMarkdown>{typeof previewData === 'string' ? previewData : JSON.stringify(previewData, null, 2)}</ReactMarkdown>
+              <div className="mb-8">
+                <h3 className="text-xs uppercase tracking-widest font-bold text-brand-ink/50 mb-4">2. Recommended Stack (Preview)</h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm text-left border-collapse">
+                    <thead>
+                      <tr className="border-b border-brand-ink/10">
+                        <th className="py-3 px-4 font-bold text-xs uppercase tracking-widest text-brand-ink/50">Layer</th>
+                        <th className="py-3 px-4 font-bold text-xs uppercase tracking-widest text-brand-ink/50">Tool</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {previewData.recommendedStack.map((item: any, i: number) => (
+                        <tr key={i} className="border-b border-brand-ink/5">
+                          <td className="py-4 px-4 font-medium">{item.layer}</td>
+                          <td className="py-4 px-4 text-brand-ink/70">{item.tool}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
 
-            {/* Book Strategy Session Call to Action */}
-            <div className="mt-20 p-12 bg-brand-ink text-brand-bg text-center rounded-sm">
-              <h3 className="text-3xl font-serif mb-6">Want a fully customized implementation roadmap?</h3>
-              <a href="/about#contact" className="inline-block px-8 py-4 bg-brand-bg text-brand-ink text-xs uppercase tracking-widest font-bold hover:bg-brand-bg/90 transition-colors">
-                Book Strategy Session
-              </a>
+            {/* Blur overlay & Unlock Form */}
+            <div className="relative">
+              <div className="absolute inset-0 bg-gradient-to-b from-transparent to-brand-bg z-10 pointer-events-none" />
+              <div className="opacity-20 blur-sm select-none pointer-events-none">
+                <h3 className="text-xs uppercase tracking-widest font-bold text-brand-ink/50 mb-4">3. Architecture & Integrations</h3>
+                <p className="font-serif leading-relaxed mb-8">Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>
+                <h3 className="text-xs uppercase tracking-widest font-bold text-brand-ink/50 mb-4">4. Go-To-Market Strategy</h3>
+                <p className="font-serif leading-relaxed">Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</p>
+              </div>
+              
+              <div className="absolute bottom-0 left-0 right-0 z-20 flex flex-col items-center justify-end pb-12">
+                {!limitReached ? (
+                  <div className="bg-white p-8 border border-brand-ink/10 shadow-xl max-w-md w-full text-center">
+                    <Lock className="mx-auto mb-4 text-brand-ink/40" size={32} />
+                    <h3 className="text-xl font-serif mb-2">Unlock Full Blueprint</h3>
+                    <p className="text-sm text-brand-ink/60 mb-6">Enter your details to reveal the complete architecture, GTM strategy, and automations.</p>
+                    
+                    <form onSubmit={handleUnlock} className="flex flex-col gap-4">
+                      <input
+                        type="text"
+                        placeholder="Your Name"
+                        required
+                        value={unlockName}
+                        onChange={(e) => setUnlockName(e.target.value)}
+                        className="w-full px-4 py-3 bg-brand-bg/50 border border-brand-ink/20 focus:outline-none focus:border-brand-ink text-sm"
+                      />
+                      <input
+                        type="email"
+                        placeholder="Your Email"
+                        required
+                        value={unlockEmail}
+                        onChange={(e) => setUnlockEmail(e.target.value)}
+                        className="w-full px-4 py-3 bg-brand-bg/50 border border-brand-ink/20 focus:outline-none focus:border-brand-ink text-sm"
+                      />
+                      <button
+                        type="submit"
+                        disabled={unlocking}
+                        className="w-full py-4 bg-brand-ink text-brand-bg text-xs uppercase tracking-widest font-bold hover:bg-brand-ink/90 transition-colors disabled:opacity-50"
+                      >
+                        {unlocking ? 'Unlocking...' : 'Reveal Full Output'}
+                      </button>
+                    </form>
+                    {error && <p className="mt-4 text-red-600 text-xs">{error}</p>}
+                  </div>
+                ) : (
+                  <div className="bg-brand-ink text-brand-bg p-8 max-w-md w-full text-center">
+                    <h3 className="text-xl font-serif mb-4">Limit Reached</h3>
+                    <p className="text-sm text-brand-bg/70 mb-8">You've used your 3 free queries. Need deeper help? Let's build it together.</p>
+                    <a href="/about#contact" className="inline-block w-full py-4 bg-brand-bg text-brand-ink text-xs uppercase tracking-widest font-bold hover:bg-brand-bg/90 transition-colors">
+                      Book Strategy Session
+                    </a>
+                  </div>
+                )}
+              </div>
             </div>
           </motion.div>
         )}
@@ -333,6 +406,6 @@ export default function Services() {
         )}
 
       </div>
-    </div >
+    </div>
   );
 }

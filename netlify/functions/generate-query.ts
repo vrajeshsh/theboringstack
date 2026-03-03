@@ -1,8 +1,15 @@
 import { Handler } from '@netlify/functions';
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = process.env.VITE_SUPABASE_URL || '';
+const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY || '';
 
 export const handler: Handler = async (event, context) => {
     const openrouterApiKey = process.env.OPENROUTER_API_KEY || '';
     const siteUrl = process.env.URL || 'https://theboringstack.netlify.app';
+
+    // Lazy init to prevent crash when env vars are missing at module load time
+    const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
     if (event.httpMethod !== 'POST') {
         return { statusCode: 405, body: 'Method Not Allowed' };
@@ -79,10 +86,27 @@ export const handler: Handler = async (event, context) => {
 
         const cleanedText = resultText.replace(/\`\`\`json/g, '').replace(/\`\`\`/g, '').trim();
 
+        const id = Math.random().toString(36).substring(2, 15);
+
+        // Save to Supabase
+        const { error: insertError } = await supabase
+            .from('marketing_queries')
+            .insert([{
+                id,
+                query_text,
+                ai_output: cleanedText,
+                lead_score: 0
+            }]);
+
+        if (insertError) {
+            console.error("Error saving query to Supabase:", insertError);
+            return { statusCode: 500, body: JSON.stringify({ error: 'Database error while saving query' }) };
+        }
+
         return {
             statusCode: 200,
             body: JSON.stringify({
-                id: Math.random().toString(36).substring(2, 15),
+                id,
                 preview: cleanedText
             })
         };

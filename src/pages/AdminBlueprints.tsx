@@ -27,7 +27,7 @@ export default function AdminBlueprints() {
   const deleteBlueprint = async (id: string) => {
     if (!confirm("Are you sure you want to delete this blueprint?")) return;
     try {
-      await fetch(`/api/blueprints/${id}`, { method: 'DELETE' });
+      await fetch(`/api/blueprints?id=${id}`, { method: 'DELETE' });
       setBlueprints(blueprints.filter(bp => bp.id !== id));
     } catch (error) {
       console.error("Error deleting blueprint:", error);
