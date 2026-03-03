@@ -78,8 +78,8 @@ export const handler: Handler = async (event, context) => {
             })
         };
 
-    } catch (error) {
+    } catch (error: any) {
         console.error("Error generating query:", error);
-        return { statusCode: 500, body: JSON.stringify({ error: "Failed to generate architecture" }) };
+        return { statusCode: 500, body: JSON.stringify({ error: error?.message || "Failed to generate architecture" }) };
     }
 };
