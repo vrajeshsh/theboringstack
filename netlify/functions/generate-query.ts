@@ -1,16 +1,25 @@
 import { Handler } from '@netlify/functions';
 
-const openrouterApiKey = process.env.OPENROUTER_API_KEY || '';
-
 export const handler: Handler = async (event, context) => {
+    const openrouterApiKey = process.env.OPENROUTER_API_KEY || '';
+    const siteUrl = process.env.URL || 'https://theboringstack.netlify.app';
+
     if (event.httpMethod !== 'POST') {
         return { statusCode: 405, body: 'Method Not Allowed' };
     }
 
     try {
-        const { query_text } = JSON.parse(event.body || '{}');
+        if (!event.body) {
+            return { statusCode: 400, body: JSON.stringify({ error: 'Request body is empty' }) };
+        }
+
+        const { query_text } = JSON.parse(event.body);
         if (!query_text || typeof query_text !== 'string') {
             return { statusCode: 400, body: JSON.stringify({ error: 'Query text is required' }) };
+        }
+
+        if (!openrouterApiKey) {
+            return { statusCode: 500, body: JSON.stringify({ error: "Netlify Error: OPENROUTER_API_KEY is not set in environment variables." }) };
         }
 
         const prompt = `
@@ -29,16 +38,12 @@ export const handler: Handler = async (event, context) => {
       Keep it concise, actionable, and visual. No fluff.
     `;
 
-        if (!openrouterApiKey) {
-            return { statusCode: 500, body: JSON.stringify({ error: "No API key provided. Please set OPENROUTER_API_KEY." }) };
-        }
-
         const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
                 "Authorization": `Bearer ${openrouterApiKey}`,
-                "HTTP-Referer": "https://theboringstack.com",
+                "HTTP-Referer": siteUrl,
                 "X-Title": "TheBoringStack",
             },
             body: JSON.stringify({
@@ -50,10 +55,20 @@ export const handler: Handler = async (event, context) => {
         });
 
         if (!response.ok) {
-            return { statusCode: 500, body: JSON.stringify({ error: `OpenRouter API error: ${response.statusText}` }) };
+            const errorData = await response.json().catch(() => ({}));
+            return {
+                statusCode: 500,
+                body: JSON.stringify({
+                    error: `OpenRouter API error (${response.status}): ${errorData.error?.message || response.statusText || 'Unknown Error'}`
+                })
+            };
         }
 
         const data = await response.json();
+        if (!data.choices || !data.choices[0]) {
+            return { statusCode: 500, body: JSON.stringify({ error: "OpenRouter returned an empty response." }) };
+        }
+
         let resultText = data.choices[0].message.content;
 
         // Remove deepseek thinking block
@@ -64,17 +79,16 @@ export const handler: Handler = async (event, context) => {
 
         const cleanedText = resultText.replace(/\`\`\`json/g, '').replace(/\`\`\`/g, '').trim();
 
-        // Return the clean Markdown text
         return {
             statusCode: 200,
             body: JSON.stringify({
-                id: Math.random().toString(36).substring(2, 15), // Mock ID for now to avoid supabase table issues during debug
+                id: Math.random().toString(36).substring(2, 15),
                 preview: cleanedText
             })
         };
 
     } catch (error: any) {
         console.error("Error generating query:", error);
-        return { statusCode: 500, body: JSON.stringify({ error: error?.message || "Failed to generate architecture" }) };
+        return { statusCode: 500, body: JSON.stringify({ error: `Function Crash: ${error?.message || "Internal error"}` }) };
     }
 };
