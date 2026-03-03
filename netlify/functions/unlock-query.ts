@@ -4,12 +4,14 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = process.env.VITE_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY || '';
 
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export const handler: Handler = async (event, context) => {
     if (event.httpMethod !== 'POST') {
         return { statusCode: 405, body: 'Method Not Allowed' };
     }
+
+    // Lazy init to prevent crash when env vars are missing at module load time
+    const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
     try {
         const { id, name, email } = JSON.parse(event.body || '{}');

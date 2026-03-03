@@ -1,11 +1,6 @@
 import { Handler } from '@netlify/functions';
-import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.VITE_SUPABASE_URL || '';
-const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY || '';
 const openrouterApiKey = process.env.OPENROUTER_API_KEY || '';
-
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export const handler: Handler = async (event, context) => {
     if (event.httpMethod !== 'POST') {
