@@ -106,8 +106,7 @@ export default function Services() {
               TheBoringStack
             </h1>
             <p className="text-lg md:text-xl text-brand-ink/70 mb-12 max-w-2xl mx-auto font-medium">
-              Get a free growth architecture powered by DeepSeek R1. <br />
-              <span className="italic opacity-60 text-sm italic tracking-widest uppercase">vibe coded at 3am with coffee</span>
+              Get a free growth architecture powered by DeepSeek R1.
             </p>
             
             <form onSubmit={handleSearch} className="relative mb-8 flex justify-center">

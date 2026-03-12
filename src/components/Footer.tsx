@@ -41,8 +41,8 @@ export default function Footer() {
       </div>
 
       <div className="max-w-7xl mx-auto mt-20 pt-8 border-t border-brand-bg/10 flex flex-col md:flex-row justify-between items-center gap-4 text-xs text-brand-bg/40 uppercase tracking-widest">
-        <p>© {new Date().getFullYear()} TheBoringStack. No rights reserved, just vibes.</p>
-        <p>vibe coded at 3am with coffee</p>
+        <p>© {new Date().getFullYear()} The Boring Stack. No rights reserved, just vibes.</p>
+        <p>Vibe coded at 2AM with elite delusion</p>
       </div>
     </footer>
   );
