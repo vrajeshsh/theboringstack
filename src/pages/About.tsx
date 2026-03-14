@@ -242,7 +242,14 @@ export default function About() {
                   </motion.button>
                 </motion.div>
               ) : (
-                <form onSubmit={handleSubmit} className="bg-white border border-brand-ink/5 p-12 space-y-8">
+                <form 
+                  name="contact" 
+                  data-netlify="true" 
+                  method="POST"
+                  onSubmit={handleSubmit} 
+                  className="bg-white border border-brand-ink/5 p-12 space-y-8"
+                >
+                  <input type="hidden" name="form-name" value="contact" />
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                     <div className="space-y-2">
                       <label className="text-[10px] uppercase tracking-widest font-bold text-brand-ink/40">Full Name</label>

@@ -4,11 +4,22 @@ import { createServer as createViteServer } from "vite";
 import Database from "better-sqlite3";
 import path from "path";
 import { fileURLToPath } from "url";
+import { Resend } from 'resend';
+import { jsPDF } from 'jspdf';
+import { createClient } from '@supabase/supabase-js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Initialize SQLite Database
+// Initialize Resend
+const resend = new Resend(process.env.RESEND_API_KEY);
+
+// Initialize Supabase (Optional for local, Required for Vercel)
+const supabaseUrl = process.env.SUPABASE_URL || '';
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+const supabase = (supabaseUrl && supabaseKey) ? createClient(supabaseUrl, supabaseKey) : null;
+
+// Initialize SQLite Database (Fallback for local dev)
 const db = new Database(path.join(__dirname, "blueprints.db"));
 
 // Create tables if they don't exist
@@ -64,11 +75,11 @@ async function startServer() {
         "${query_text}"
 
         ### Instructions for the Overview (Preview):
-        1. **Prosperous Business Overview**: Briefly describe how the user's business could prosper and scale using the right technology stack.
-        2. **Growth Potential**: Highlight 2-3 key areas where AI and modern MarTech will provide the biggest ROI.
-        3. **Guided Next Steps**: Encourage the user to sign up to receive the **Full Growth Architecture Blueprint** (PDF) including specific tool recommendations, automations, and a 90-day roadmap.
+        1. **Prosperous Business Overview**: Describe how the user's business will prosper and scale using the right technology stack.
+        2. **Growth Potential**: Identify 2-3 strategic areas where AI and modern MarTech will provide the highest ROI.
+        3. **Guided Next Steps**: Professionally encourage the user to sign up to receive the **Full Growth Architecture Blueprint** (PDF) which includes tool recommendations, automations, and a 90-day roadmap.
 
-        Keep it concise, inspirational, and professional. Return in clean Markdown.
+        CRITICAL: Do not use any asterisks (*) for bolding or lists. Use plain text or standard Markdown headers (#) only. Maintain an extremely professional, executive-level tone. Return in clean Markdown.
       `;
 
       let resultText = "";
@@ -108,14 +119,20 @@ async function startServer() {
       }
 
       const cleanedText = resultText.trim();
-
       const id = Math.random().toString(36).substring(2, 15);
 
-      const stmt = db.prepare(`
-        INSERT INTO marketing_queries (id, query_text, ai_output, lead_score)
-        VALUES (?, ?, ?, ?)
-      `);
-      stmt.run(id, query_text, cleanedText, 0);
+      if (supabase) {
+        const { error: sbError } = await supabase
+          .from('marketing_queries')
+          .insert([{ id, query_text, ai_output: cleanedText, lead_score: 0 }]);
+        if (sbError) throw sbError;
+      } else {
+        const stmt = db.prepare(`
+          INSERT INTO marketing_queries (id, query_text, ai_output, lead_score)
+          VALUES (?, ?, ?, ?)
+        `);
+        stmt.run(id, query_text, cleanedText, 0);
+      }
 
       res.json({
         id,
@@ -128,43 +145,127 @@ async function startServer() {
   });
 
   // Unlock full query
-  app.post("/api/unlock-query", (req, res) => {
+  app.post("/api/unlock-query", async (req, res) => {
     try {
       const { id, name, email } = req.body;
       if (!id || !name || !email) {
         return res.status(400).json({ error: "Missing required fields" });
       }
 
-      // Check or create subscriber
-      let subscriber = db.prepare("SELECT * FROM subscribers WHERE email = ?").get(email) as any;
+      let previewText = "";
+      let queryText = "";
 
-      if (!subscriber) {
-        db.prepare("INSERT INTO subscribers (email, name, total_queries) VALUES (?, ?, 0)").run(email, name);
-        subscriber = { email, name, total_queries: 0 };
+      if (supabase) {
+        // 1. Check/Create subscriber
+        const { data: subData } = await supabase.from('subscribers').select('*').eq('email', email).single();
+        if (!subData) {
+          await supabase.from('subscribers').insert([{ email, name, total_queries: 1 }]);
+        } else {
+          await supabase.from('subscribers').update({ total_queries: (subData.total_queries || 0) + 1 }).eq('email', email);
+        }
+
+        // 2. Update query and get data
+        const { data: qData, error: qError } = await supabase
+          .from('marketing_queries')
+          .update({ email })
+          .eq('id', id)
+          .select()
+          .single();
+        
+        if (qError || !qData) return res.status(404).json({ error: "Query not found" });
+        previewText = qData.ai_output;
+        queryText = qData.query_text;
+      } else {
+        // SQLite Fallback
+        let subscriber = db.prepare("SELECT * FROM subscribers WHERE email = ?").get(email) as any;
+        if (!subscriber) {
+          db.prepare("INSERT INTO subscribers (email, name, total_queries) VALUES (?, ?, 0)").run(email, name);
+        }
+        db.prepare("UPDATE marketing_queries SET email = ? WHERE id = ?").run(email, id);
+        db.prepare("UPDATE subscribers SET total_queries = total_queries + 1 WHERE email = ?").run(email);
+        const queryRow = db.prepare("SELECT ai_output, query_text FROM marketing_queries WHERE id = ?").get(id) as any;
+        if (!queryRow) return res.status(404).json({ error: "Query not found" });
+        previewText = queryRow.ai_output;
+        queryText = queryRow.query_text;
       }
 
-      if (subscriber.total_queries >= 3) {
-        return res.status(403).json({
-          error: "Limit reached",
-          message: "Need deeper help? Let's build it together.",
-          limitReached: true
-        });
+      // 1. Generate PDF
+      const doc = new jsPDF();
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(22);
+      doc.text("TheBoringStack Blueprint", 20, 30);
+      
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(12);
+      doc.text(`Prepared for: ${name}`, 20, 45);
+      doc.text(`Date: ${new Date().toLocaleDateString()}`, 20, 52);
+      
+      doc.setFont("helvetica", "bold");
+      doc.text("Original Query:", 20, 65);
+      doc.setFont("helvetica", "italic");
+      const splitQuery = doc.splitTextToSize(queryText, 170);
+      doc.text(splitQuery, 20, 72);
+
+      doc.setFont("helvetica", "bold");
+      doc.text("Your Marketing Architecture:", 20, 95);
+      doc.setFont("helvetica", "normal");
+      const splitText = doc.splitTextToSize(previewText, 170);
+      doc.text(splitText, 20, 102);
+
+      const pdfBuffer = Buffer.from(doc.output('arraybuffer'));
+
+      // 2. Send Email via Resend
+      if (process.env.RESEND_API_KEY) {
+        console.log(`Attempting to send email to ${email}...`);
+        
+        const fromEmail = process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev';
+        const adminEmail = process.env.ADMIN_NOTIFICATION_EMAIL || 'vrajeshshah13@gmail.com';
+
+        try {
+          const { data, error } = await resend.emails.send({
+            from: fromEmail, 
+            to: email,
+            bcc: adminEmail, // Send a copy to admin
+            subject: 'Your Growth Marketing Blueprint',
+            html: `
+              <div style="font-family: serif; line-height: 1.6; color: #1a1a1a;">
+                <h1 style="font-style: italic;">Hi ${name},</h1>
+                <p>Thanks for using <strong>TheBoringStack</strong>. I've attached your custom growth architecture blueprint based on your query.</p>
+                <p>I build these systems for a living. If you want to discuss how to actually implement this stack or need a deeper audit, just reply to this email or <a href="https://theboringstack.com/about#contact">book a chat here</a>.</p>
+                <p>Best,<br>Vrajesh Shah<br><em>Founder, TheBoringStack</em></p>
+              </div>
+            `,
+            attachments: [
+              {
+                filename: 'Growth_Architecture_Blueprint.pdf',
+                content: pdfBuffer,
+              },
+            ],
+          });
+
+          if (error) {
+            // Check if it's the "onboarding" mode restriction
+            if (error.message.includes("can only send to your own email")) {
+              console.warn(`RESEND RESTRICTION: Could not send to ${email} (unverified in onboarding mode). BCC to ${adminEmail} should still work.`);
+            } else {
+              console.error("Resend API Error:", error);
+              throw new Error("Failed to send email via Resend");
+            }
+          } else {
+            console.log("Email sent successfully:", data);
+          }
+        } catch (resendErr: any) {
+          console.warn("Caught Resend Error:", resendErr.message);
+          // If we are in dev/onboarding mode, we don't want to break the user flow just because the email didn't send to a 3rd party
+          if (!resendErr.message.includes("can only send to your own email")) {
+             throw resendErr;
+          }
+        }
+      } else {
+        console.warn("RESEND_API_KEY not found in environment.");
       }
 
-      // Update query with email
-      db.prepare("UPDATE marketing_queries SET email = ? WHERE id = ?").run(email, id);
-
-      // Increment queries
-      db.prepare("UPDATE subscribers SET total_queries = total_queries + 1 WHERE email = ?").run(email);
-
-      // Get full output
-      const queryRow = db.prepare("SELECT ai_output FROM marketing_queries WHERE id = ?").get(id) as any;
-      if (!queryRow) {
-        return res.status(404).json({ error: "Query not found" });
-      }
-
-      const fullBlueprint = JSON.parse(queryRow.ai_output);
-      res.json({ blueprint: fullBlueprint });
+      res.json({ success: true, message: "Blueprint sent to your email.", blueprint: previewText });
 
     } catch (error) {
       console.error("Error unlocking query:", error);
@@ -173,15 +274,30 @@ async function startServer() {
   });
 
   // Get all queries (Admin)
-  app.get("/api/queries", (req, res) => {
+  app.get("/api/queries", async (req, res) => {
     try {
-      const stmt = db.prepare("SELECT * FROM marketing_queries ORDER BY lead_score DESC, created_at DESC");
-      const queries = stmt.all();
+      let queries = [];
+      if (supabase) {
+        const { data, error } = await supabase
+          .from('marketing_queries')
+          .select('*')
+          .order('created_at', { ascending: false });
+        if (error) throw error;
+        queries = data;
+      } else {
+        const stmt = db.prepare("SELECT * FROM marketing_queries ORDER BY lead_score DESC, created_at DESC");
+        queries = stmt.all();
+      }
 
-      const parsedQueries = queries.map((q: any) => ({
-        ...q,
-        ai_output: JSON.parse(q.ai_output)
-      }));
+      const parsedQueries = queries.map((q: any) => {
+        let aiOutput = q.ai_output;
+        if (typeof aiOutput === 'string') {
+          try {
+            aiOutput = JSON.parse(q.ai_output);
+          } catch (e) {}
+        }
+        return { ...q, ai_output: aiOutput };
+      });
 
       res.json(parsedQueries);
     } catch (error) {
@@ -190,120 +306,26 @@ async function startServer() {
     }
   });
 
-  // Generate Blueprint using DeepSeek (or Gemini fallback)
-  app.post("/api/generate-blueprint", async (req, res) => {
-    try {
-      const formData = req.body;
-      if (!formData || typeof formData !== 'object') {
-        return res.status(400).json({ error: "Invalid request payload" });
-      }
-      if (!formData.businessIdea || typeof formData.businessIdea !== 'string') {
-        return res.status(400).json({ error: "Business Idea is required" });
-      }
-
-      const prompt = `
-        You are a professional Marketing Stack Architect. Analyze the following business details and create a comprehensive Marketing Architecture Blueprint.
-        
-        Business Details:
-        - Website URL: ${formData.websiteUrl || 'N/A'}
-        - Business Idea/Description: ${formData.businessIdea || 'N/A'}
-        - Current Tools: ${formData.currentTools || 'None'}
-        - Business Type: ${formData.businessType}
-        - Budget Range: ${formData.budgetRange}
-        - Target Audience: ${formData.targetAudience || 'General'}
-        - Geography: ${formData.geography}
-        - Growth Goal: ${formData.growthGoal}
-        
-        Keep your reasoning concise. Provide a highly professional, structured response in JSON format matching this exact schema:
-        {
-          "businessModelAnalysis": "Professional breakdown of the business model",
-          "funnelStrategy": "Diagram-style explanation in text format",
-          "recommendedStack": [
-            { "layer": "e.g., Website CMS", "tool": "Specific tool", "why": "Brief justification" }
-          ],
-          "dataAndTrackingSetup": "Tracking architecture recommendations",
-          "automationPlan": "Suggested automation workflows",
-          "ninetyDayRoadmap": [
-            { "phase": "e.g., Phase 1: Foundation", "description": "Details" }
-          ],
-          "estimatedBudgetTiers": [
-            { "tier": "e.g., Free", "cost": "$0", "description": "Details" }
-          ],
-          "strategicNotes": "CRO suggestions and AI integrations"
-        }
-        
-        Ensure the tone is authoritative and strategic, fitting a high-end marketing consultancy.
-        Return ONLY valid JSON. Do not include markdown code blocks like \`\`\`json.
-      `;
-
-      let resultText = "";
-
-      if (process.env.OPENROUTER_API_KEY) {
-        const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
-            "HTTP-Referer": "https://theboringstack.com",
-            "X-Title": "TheBoringStack",
-          },
-          body: JSON.stringify({
-            model: "openai/gpt-4o-mini",
-            messages: [{ role: "user", content: prompt }],
-            temperature: 0.2,
-            max_tokens: 2048
-          })
-        });
-
-        if (!response.ok) {
-          throw new Error(`OpenRouter API error: ${response.statusText}`);
-        }
-
-        const data = await response.json();
-        resultText = data.choices[0].message.content;
-      } else {
-        throw new Error("No API key provided. Please set OPENROUTER_API_KEY.");
-      }
-
-      // Remove deepseek thinking block
-      const thinkMatch = resultText.match(/<think>[\s\S]*?<\/think>/);
-      if (thinkMatch) {
-        resultText = resultText.replace(thinkMatch[0], '');
-      }
-
-      // Clean up potential markdown formatting from the response
-      const cleanedText = resultText.replace(/\`\`\`json/g, '').replace(/\`\`\`/g, '').trim();
-
-      let blueprint;
-      try {
-        blueprint = JSON.parse(cleanedText);
-      } catch (err) {
-        console.error("JSON parsing error:", err, "Cleaned text:", cleanedText);
-        throw new Error("Failed to parse the AI architecture response into JSON.");
-      }
-
-      res.json(blueprint);
-    } catch (error) {
-      console.error("Error generating blueprint:", error);
-      res.status(500).json({ error: "Failed to generate blueprint" });
-    }
-  });
-
   // Save a blueprint
-  app.post("/api/blueprints", (req, res) => {
+  app.post("/api/blueprints", async (req, res) => {
     try {
       const { id, business_name, input_data, ai_output } = req.body;
-
       if (!id || !business_name || !input_data || !ai_output) {
         return res.status(400).json({ error: "Missing required fields" });
       }
 
-      const stmt = db.prepare(`
-        INSERT INTO marketing_blueprints (id, business_name, input_data, ai_output)
-        VALUES (?, ?, ?, ?)
-      `);
-
-      stmt.run(id, business_name, JSON.stringify(input_data), JSON.stringify(ai_output));
+      if (supabase) {
+        const { error } = await supabase
+          .from('marketing_blueprints')
+          .insert([{ id, business_name, input_data, ai_output }]);
+        if (error) throw error;
+      } else {
+        const stmt = db.prepare(`
+          INSERT INTO marketing_blueprints (id, business_name, input_data, ai_output)
+          VALUES (?, ?, ?, ?)
+        `);
+        stmt.run(id, business_name, JSON.stringify(input_data), JSON.stringify(ai_output));
+      }
 
       res.status(201).json({ success: true, id });
     } catch (error) {
@@ -313,17 +335,28 @@ async function startServer() {
   });
 
   // Get all blueprints (Admin)
-  app.get("/api/blueprints", (req, res) => {
+  app.get("/api/blueprints", async (req, res) => {
     try {
-      const stmt = db.prepare("SELECT * FROM marketing_blueprints ORDER BY created_at DESC");
-      const blueprints = stmt.all();
+      let blueprints = [];
+      if (supabase) {
+        const { data, error } = await supabase
+          .from('marketing_blueprints')
+          .select('*')
+          .order('created_at', { ascending: false });
+        if (error) throw error;
+        blueprints = data;
+      } else {
+        const stmt = db.prepare("SELECT * FROM marketing_blueprints ORDER BY created_at DESC");
+        blueprints = stmt.all();
+      }
 
-      // Parse JSON strings back to objects
-      const parsedBlueprints = blueprints.map((bp: any) => ({
-        ...bp,
-        input_data: JSON.parse(bp.input_data),
-        ai_output: JSON.parse(bp.ai_output)
-      }));
+      const parsedBlueprints = blueprints.map((bp: any) => {
+        let inputData = bp.input_data;
+        let aiOutput = bp.ai_output;
+        if (typeof inputData === 'string') try { inputData = JSON.parse(inputData); } catch (e) {}
+        if (typeof aiOutput === 'string') try { aiOutput = JSON.parse(aiOutput); } catch (e) {}
+        return { ...bp, input_data: inputData, ai_output: aiOutput };
+      });
 
       res.json(parsedBlueprints);
     } catch (error) {
@@ -333,14 +366,18 @@ async function startServer() {
   });
 
   // Delete a blueprint
-  app.delete("/api/blueprints", (req, res) => {
+  app.delete("/api/blueprints", async (req, res) => {
     try {
       const id = req.query.id as string;
-      if (!id) {
-        return res.status(400).json({ error: "ID is required" });
+      if (!id) return res.status(400).json({ error: "ID is required" });
+
+      if (supabase) {
+        const { error } = await supabase.from('marketing_blueprints').delete().eq('id', id);
+        if (error) throw error;
+      } else {
+        const stmt = db.prepare("DELETE FROM marketing_blueprints WHERE id = ?");
+        stmt.run(id);
       }
-      const stmt = db.prepare("DELETE FROM marketing_blueprints WHERE id = ?");
-      stmt.run(id);
       res.json({ success: true });
     } catch (error) {
       console.error("Error deleting blueprint:", error);
