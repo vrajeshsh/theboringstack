@@ -14,52 +14,40 @@ const __dirname = path.dirname(__filename);
 // Initialize Resend
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-// Initialize Supabase (Optional for local, Required for Vercel)
-const supabaseUrl = process.env.SUPABASE_URL || '';
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-const supabase = (supabaseUrl && supabaseKey) ? createClient(supabaseUrl, supabaseKey) : null;
-
-if (supabase) {
-  console.log("✅ Using Supabase Database");
-} else {
-  console.log("⚠️ Supabase credentials not found. Using local SQLite.");
-}
-
-// Initialize SQLite Database (Fallback for local dev)
+// Delay initialization to prevent cold-start crashes on Vercel
 let db: any = null;
-if (!supabase) {
-  db = new Database(path.join(__dirname, "blueprints.db"));
+let supabase: any = null;
 
-  // Create tables if they don't exist (Only for SQLite)
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS marketing_blueprints (
-      id TEXT PRIMARY KEY,
-      business_name TEXT,
-      input_data TEXT,
-      ai_output TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
+function getDb() {
+  if (supabase || db) return { supabase, db };
 
-    CREATE TABLE IF NOT EXISTS subscribers (
-      email TEXT PRIMARY KEY,
-      name TEXT,
-      total_queries INTEGER DEFAULT 0,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-
-    CREATE TABLE IF NOT EXISTS marketing_queries (
-      id TEXT PRIMARY KEY,
-      email TEXT,
-      query_text TEXT,
-      ai_output TEXT,
-      lead_score INTEGER DEFAULT 0,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-  `);
+  const supabaseUrl = process.env.SUPABASE_URL || '';
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+  
+  if (supabaseUrl && supabaseKey) {
+    supabase = createClient(supabaseUrl, supabaseKey);
+    console.log("✅ Lazy-initialized Supabase");
+  } else {
+    console.log("⚠️ Supabase credentials not found. Using local SQLite.");
+    db = new Database(path.join(__dirname, "blueprints.db"));
+    // Create tables if they don't exist
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS marketing_blueprints (id TEXT PRIMARY KEY, business_name TEXT, input_data TEXT, ai_output TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);
+      CREATE TABLE IF NOT EXISTS subscribers (email TEXT PRIMARY KEY, name TEXT, total_queries INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);
+      CREATE TABLE IF NOT EXISTS marketing_queries (id TEXT PRIMARY KEY, email TEXT, query_text TEXT, ai_output TEXT, lead_score INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);
+    `);
+  }
+  return { supabase, db };
 }
 
 const app = express();
 app.use(express.json({ limit: "50mb" }));
+
+// Error handling middleware
+app.use((err: any, req: any, res: any, next: any) => {
+  console.error("GLOBAL ERROR:", err);
+  res.status(500).json({ error: "Internal Server Error", details: err.message });
+});
 
 // Request logging middleware
 app.use((req, res, next) => {
@@ -132,6 +120,7 @@ app.post("/api/generate-query", async (req, res) => {
 
     const cleanedText = resultText.trim();
     const id = Math.random().toString(36).substring(2, 15);
+    const { supabase, db } = getDb();
 
     if (supabase) {
       const { error: sbError } = await supabase
@@ -166,6 +155,7 @@ app.post("/api/unlock-query", async (req, res) => {
 
     let previewText = "";
     let queryText = "";
+    const { supabase, db } = getDb();
 
     if (supabase) {
       // 1. Check/Create subscriber
@@ -289,6 +279,7 @@ app.post("/api/unlock-query", async (req, res) => {
 app.get("/api/queries", async (req, res) => {
   try {
     let queries = [];
+    const { supabase, db } = getDb();
     if (supabase) {
       const { data, error } = await supabase
         .from('marketing_queries')
@@ -318,6 +309,107 @@ app.get("/api/queries", async (req, res) => {
   }
 });
 
+// Generate Blueprint using DeepSeek (or Gemini fallback)
+app.post("/api/generate-blueprint", async (req, res) => {
+  try {
+    const formData = req.body;
+    if (!formData || typeof formData !== 'object') {
+      return res.status(400).json({ error: "Invalid request payload" });
+    }
+    if (!formData.businessIdea || typeof formData.businessIdea !== 'string') {
+      return res.status(400).json({ error: "Business Idea is required" });
+    }
+
+    const { supabase, db } = getDb();
+
+    const prompt = `
+      You are a professional Marketing Stack Architect. Analyze the following business details and create a comprehensive Marketing Architecture Blueprint.
+      
+      Business Details:
+      - Website URL: ${formData.websiteUrl || 'N/A'}
+      - Business Idea/Description: ${formData.businessIdea || 'N/A'}
+      - Current Tools: ${formData.currentTools || 'None'}
+      - Business Type: ${formData.businessType}
+      - Budget Range: ${formData.budgetRange}
+      - Target Audience: ${formData.targetAudience || 'General'}
+      - Geography: ${formData.geography}
+      - Growth Goal: ${formData.growthGoal}
+      
+      Keep your reasoning concise. Provide a highly professional, structured response in JSON format matching this exact schema:
+      {
+        "businessModelAnalysis": "Professional breakdown of the business model",
+        "funnelStrategy": "Diagram-style explanation in text format",
+        "recommendedStack": [
+          { "layer": "e.g., Website CMS", "tool": "Specific tool", "why": "Brief justification" }
+        ],
+        "dataAndTrackingSetup": "Tracking architecture recommendations",
+        "automationPlan": "Suggested automation workflows",
+        "ninetyDayRoadmap": [
+          { "phase": "e.g., Phase 1: Foundation", "description": "Details" }
+        ],
+        "estimatedBudgetTiers": [
+          { "tier": "e.g., Free", "cost": "$0", "description": "Details" }
+        ],
+        "strategicNotes": "CRO suggestions and AI integrations"
+      }
+      
+      Ensure the tone is authoritative and strategic, fitting a high-end marketing consultancy.
+      Return ONLY valid JSON. Do not include markdown code blocks like \`\`\`json.
+    `;
+
+    let resultText = "";
+
+    if (process.env.OPENROUTER_API_KEY) {
+      const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
+          "HTTP-Referer": "https://theboringstack.com",
+          "X-Title": "TheBoringStack",
+        },
+        body: JSON.stringify({
+          model: "openai/gpt-4o-mini",
+          messages: [{ role: "user", content: prompt }],
+          temperature: 0.2,
+          max_tokens: 2048
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`OpenRouter API error: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      resultText = data.choices[0].message.content;
+    } else {
+      throw new Error("No API key provided. Please set OPENROUTER_API_KEY.");
+    }
+
+    // Remove deepseek thinking block
+    const thinkMatch = resultText.match(/<think>[\s\S]*?<\/think>/);
+    if (thinkMatch) {
+      resultText = resultText.replace(thinkMatch[0], '');
+    }
+
+    // Clean up potential markdown formatting from the response
+    const cleanedText = resultText.replace(/\`\`\`json/g, '').replace(/\`\`\`/g, '').trim();
+
+    let blueprint;
+    try {
+      blueprint = JSON.parse(cleanedText);
+    } catch (err) {
+      console.error("JSON parsing error:", err, "Cleaned text:", cleanedText);
+      throw new Error("Failed to parse the AI architecture response into JSON.");
+    }
+
+    res.json(blueprint);
+  } catch (error) {
+    console.error("Error generating blueprint:", error);
+    res.status(500).json({ error: "Failed to generate blueprint" });
+  }
+});
+
 // Save a blueprint
 app.post("/api/blueprints", async (req, res) => {
   try {
@@ -326,6 +418,7 @@ app.post("/api/blueprints", async (req, res) => {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
+    const { supabase, db } = getDb();
     if (supabase) {
       const { error } = await supabase
         .from('marketing_blueprints')
@@ -350,6 +443,7 @@ app.post("/api/blueprints", async (req, res) => {
 app.get("/api/blueprints", async (req, res) => {
   try {
     let blueprints = [];
+    const { supabase, db } = getDb();
     if (supabase) {
       const { data, error } = await supabase
         .from('marketing_blueprints')
@@ -383,6 +477,7 @@ app.delete("/api/blueprints", async (req, res) => {
     const id = req.query.id as string;
     if (!id) return res.status(400).json({ error: "ID is required" });
 
+    const { supabase, db } = getDb();
     if (supabase) {
       const { error } = await supabase.from('marketing_blueprints').delete().eq('id', id);
       if (error) throw error;
