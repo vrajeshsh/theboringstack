@@ -19,35 +19,44 @@ const supabaseUrl = process.env.SUPABASE_URL || '';
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const supabase = (supabaseUrl && supabaseKey) ? createClient(supabaseUrl, supabaseKey) : null;
 
+if (supabase) {
+  console.log("✅ Using Supabase Database");
+} else {
+  console.log("⚠️ Supabase credentials not found. Using local SQLite.");
+}
+
 // Initialize SQLite Database (Fallback for local dev)
-const db = new Database(path.join(__dirname, "blueprints.db"));
+let db: any = null;
+if (!supabase) {
+  db = new Database(path.join(__dirname, "blueprints.db"));
 
-// Create tables if they don't exist
-db.exec(`
-  CREATE TABLE IF NOT EXISTS marketing_blueprints (
-    id TEXT PRIMARY KEY,
-    business_name TEXT,
-    input_data TEXT,
-    ai_output TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  );
+  // Create tables if they don't exist (Only for SQLite)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS marketing_blueprints (
+      id TEXT PRIMARY KEY,
+      business_name TEXT,
+      input_data TEXT,
+      ai_output TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
 
-  CREATE TABLE IF NOT EXISTS subscribers (
-    email TEXT PRIMARY KEY,
-    name TEXT,
-    total_queries INTEGER DEFAULT 0,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  );
+    CREATE TABLE IF NOT EXISTS subscribers (
+      email TEXT PRIMARY KEY,
+      name TEXT,
+      total_queries INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
 
-  CREATE TABLE IF NOT EXISTS marketing_queries (
-    id TEXT PRIMARY KEY,
-    email TEXT,
-    query_text TEXT,
-    ai_output TEXT,
-    lead_score INTEGER DEFAULT 0,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  );
-`);
+    CREATE TABLE IF NOT EXISTS marketing_queries (
+      id TEXT PRIMARY KEY,
+      email TEXT,
+      query_text TEXT,
+      ai_output TEXT,
+      lead_score INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+}
 
 const app = express();
 app.use(express.json({ limit: "50mb" }));
