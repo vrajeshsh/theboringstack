@@ -382,27 +382,21 @@ app.delete("/api/blueprints", async (req, res) => {
   }
 });
 
-async function startServer() {
-  const PORT = 3000;
-
-  // Vite middleware for development
+// Setup function (for local dev)
+async function setup() {
   if (process.env.NODE_ENV !== "production") {
+    const PORT = 3000;
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
     });
     app.use(vite.middlewares);
-  }
-
-  // NOTE: On Vercel, static files are served by Vercel Edge, not this Express app.
-  // We only need the app to listen when running locally.
-  if (process.env.NODE_ENV !== "production") {
     app.listen(PORT, "0.0.0.0", () => {
       console.log(`Server running on http://localhost:${PORT}`);
     });
   }
 }
 
-startServer();
+setup();
 
 export default app;
