@@ -88,7 +88,7 @@ export default function Services() {
 
   return (
     <div className="px-6 py-20 min-h-screen flex flex-col items-center justify-center">
-      <div className="max-w-5xl w-full mx-auto">
+      <div className="max-w-4xl w-full mx-auto">
         
         <AnimatePresence mode="wait">
           {!previewData && !fullBlueprint && (
@@ -113,7 +113,7 @@ export default function Services() {
                     onChange={(e) => setQuery(e.target.value)}
                     placeholder="Describe your business and growth goal..."
                     minRows={1}
-                    className="w-full min-w-[300px] pl-8 pr-20 py-6 text-xl font-serif bg-transparent border-none focus:outline-none focus:ring-0 resize-none overflow-hidden text-left leading-relaxed"
+                    className="w-full min-w-[300px] pl-8 pr-20 py-5 text-xl font-serif bg-transparent border-none focus:outline-none focus:ring-0 resize-none overflow-hidden text-left leading-relaxed"
                     disabled={loading}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' && !e.shiftKey) {
