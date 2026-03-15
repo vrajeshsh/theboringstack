@@ -278,6 +278,32 @@ app.get("/api/health", (req, res) => {
         } catch (e) {
           fullBlueprint = qData.ai_output;
         }
+
+        // --- NEW: Email Sending Logic ---
+        try {
+          await resend.emails.send({
+            from: 'TheBoringStack <hello@vrajeshshah.com>',
+            to: email,
+            subject: 'Your Growth Marketing Blueprint',
+            html: `
+              <h1>Your Custom Architecture is Ready</h1>
+              <p>Hi ${name},</p>
+              <p>Thanks for using TheBoringStack. We've generated your custom marketing architecture blueprint.</p>
+              <p><strong>Business Goal:</strong> ${id}</p>
+              <hr />
+              <div style="font-family: serif; white-space: pre-wrap;">
+                ${typeof fullBlueprint === 'string' ? fullBlueprint : JSON.stringify(fullBlueprint, null, 2)}
+              </div>
+              <hr />
+              <p>Best,<br/>TheBoringStack Team</p>
+            `,
+          });
+          console.log(`✅ Email dispatched to ${email}`);
+        } catch (emailError: any) {
+          console.error("❌ Failed to send email via Resend:", emailError.message);
+          // We don't return an error to the user here because the blueprint is already unlocked in the UI
+        }
+
         return res.json({ blueprint: fullBlueprint });
       } else if (db) {
         // Check or create subscriber
@@ -301,6 +327,28 @@ app.get("/api/health", (req, res) => {
         }
 
         const fullBlueprint = JSON.parse(queryRow.ai_output);
+
+        // --- NEW: Email Sending Logic (SQLite Fallback) ---
+        try {
+          await resend.emails.send({
+            from: 'TheBoringStack <hello@vrajeshshah.com>',
+            to: email,
+            subject: 'Your Growth Marketing Blueprint',
+            html: `
+              <h1>Your Custom Architecture is Ready</h1>
+              <p>Hi ${name},</p>
+              <p>Thanks for using TheBoringStack. Here is your blueprint generated locally.</p>
+              <hr />
+              <div style="font-family: serif; white-space: pre-wrap;">
+                ${JSON.stringify(fullBlueprint, null, 2)}
+              </div>
+            `,
+          });
+          console.log(`✅ Email dispatched to ${email} (SQLite)`);
+        } catch (emailError: any) {
+          console.error("❌ Failed to send email via Resend:", emailError.message);
+        }
+
         return res.json({ blueprint: fullBlueprint });
       } else {
         return res.status(500).json({ error: "No database available to retrieve the request." });
