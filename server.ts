@@ -39,7 +39,6 @@ async function getDb() {
       console.error("❌ Failed to initialize SQLite:", err.message);
       throw new Error("No database available. Please configure SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY on Vercel.");
     }
-  }
   return { supabase, db };
 }
 
@@ -390,5 +389,5 @@ app.get("/api/health", (req, res) => {
     app.use(vite.middlewares);
     app.listen(PORT, "0.0.0.0", () => console.log(`Server running on http://localhost:${PORT}`));
   }
-}
 
+export default app;
