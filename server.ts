@@ -1,6 +1,5 @@
 import "dotenv/config";
 import express from "express";
-import { createServer as createViteServer } from "vite";
 import Database from "better-sqlite3";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -141,14 +140,6 @@ async function startServer() {
       if (!subscriber) {
         db.prepare("INSERT INTO subscribers (email, name, total_queries) VALUES (?, ?, 0)").run(email, name);
         subscriber = { email, name, total_queries: 0 };
-      }
-
-      if (subscriber.total_queries >= 3) {
-        return res.status(403).json({
-          error: "Limit reached",
-          message: "Need deeper help? Let's build it together.",
-          limitReached: true
-        });
       }
 
       // Update query with email
@@ -350,6 +341,7 @@ async function startServer() {
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
