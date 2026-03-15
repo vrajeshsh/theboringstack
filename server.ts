@@ -24,14 +24,20 @@ let supabase: any = null;
 async function getDb() {
   if (supabase || db) return { supabase, db };
 
-  const supabaseUrl = process.env.SUPABASE_URL || '';
-  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   
   if (supabaseUrl && supabaseKey) {
     supabase = createClient(supabaseUrl, supabaseKey);
     console.log("✅ Lazy-initialized Supabase");
   } else {
-    console.log("⚠️ Supabase credentials not found. Attempting to load SQLite for local development.");
+    // If we are on Vercel and missing these, we MUST error out clearly
+    if (process.env.VERCEL) {
+      console.error("❌ CRITICAL: Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY on Vercel.");
+      throw new Error("Missing Supabase configuration. Please add SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY to Vercel Environment Variables.");
+    }
+    
+    console.log("⚠️ Supabase credentials not found. Using local SQLite.");
     try {
       // Dynamic import to prevent Vercel from failing if the native module isn't present
       const { default: Database } = await import("better-sqlite3");
