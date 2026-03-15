@@ -178,18 +178,13 @@ app.get("/api/health", (req, res) => {
       const { supabase, db } = await getDb();
       if (supabase) {
         const { error } = await supabase.from('marketing_queries').insert([{ id, query_text, ai_output: cleanedText, lead_score: 0 }]);
-        if (error) {
-          console.error("❌ Failed to insert query to supabase:", error);
-          throw new Error("Failed to save query to cloud database.");
-        }
+        if (error) console.error("Failed to insert query to supabase", error);
       } else if (db) {
         const stmt = db.prepare(`
           INSERT INTO marketing_queries (id, query_text, ai_output, lead_score)
           VALUES (?, ?, ?, ?)
         `);
         stmt.run(id, query_text, cleanedText, 0);
-      } else {
-        throw new Error("No database (Supabase or SQLite) is available to save the result. Please check environment variables.");
       }
 
       res.json({
