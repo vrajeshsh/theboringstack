@@ -1,0 +1,14 @@
+{
+  "version": 2,
+  "installCommand": "npm install --force",
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/index.ts"
+    },
+    {
+      "source": "/((?!api/|assets/|favicon.ico|vite.svg).*)",
+      "destination": "/index.html"
+    }
+  ]
+}

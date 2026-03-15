@@ -3,50 +3,94 @@ import express from "express";
 import Database from "better-sqlite3";
 import path from "path";
 import { fileURLToPath } from "url";
+import { Resend } from 'resend';
+import { jsPDF } from 'jspdf';
+import { createClient } from '@supabase/supabase-js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Initialize SQLite Database
-const db = new Database(path.join(__dirname, "blueprints.db"));
+// Initialize Resend
+const resend = new Resend(process.env.RESEND_API_KEY);
 
-// Create tables if they don't exist
-db.exec(`
-  CREATE TABLE IF NOT EXISTS marketing_blueprints (
-    id TEXT PRIMARY KEY,
-    business_name TEXT,
-    input_data TEXT,
-    ai_output TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  );
+// State for database connections
+let db: any = null;
+let supabase: any = null;
 
-  CREATE TABLE IF NOT EXISTS subscribers (
-    email TEXT PRIMARY KEY,
-    name TEXT,
-    total_queries INTEGER DEFAULT 0,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  );
+/**
+ * Safely initializes the database connection on demand.
+ * This prevents Vercel cold-start crashes caused by native SQLite dependencies.
+ */
+async function getDb() {
+  if (supabase || db) return { supabase, db };
 
-  CREATE TABLE IF NOT EXISTS marketing_queries (
-    id TEXT PRIMARY KEY,
-    email TEXT,
-    query_text TEXT,
-    ai_output TEXT,
-    lead_score INTEGER DEFAULT 0,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  );
-`);
+    try {
+      // Dynamic import to prevent Vercel from failing if the native module isn't present
+      const { default: Database } = await import("better-sqlite3");
+      db = new Database(path.join(__dirname, "blueprints.db"));
+      
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS marketing_blueprints (id TEXT PRIMARY KEY, business_name TEXT, input_data TEXT, ai_output TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);
+        CREATE TABLE IF NOT EXISTS subscribers (email TEXT PRIMARY KEY, name TEXT, total_queries INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);
+        CREATE TABLE IF NOT EXISTS marketing_queries (id TEXT PRIMARY KEY, email TEXT, query_text TEXT, ai_output TEXT, lead_score INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);
+      `);
+      console.log("✅ Local SQLite initialized.");
+    } catch (err: any) {
+      console.error("❌ Failed to initialize SQLite:", err.message);
+      throw new Error("No database available. Please configure SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY on Vercel.");
+    }
+  }
+  return { supabase, db };
+}
 
-async function startServer() {
-  const app = express();
-  const PORT = 3000;
+const app = express();
+app.use(express.json({ limit: "50mb" }));
 
-  app.use(express.json({ limit: "50mb" }));
+/**
+ * Defensive JSON Fetch Wrapper
+ */
+async function safeFetchJson(url: string, options: any) {
+  const response = await fetch(url, options);
+  const contentType = response.headers.get("content-type");
+  
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error(`Upstream Error (${response.status}):`, errorText);
+    throw new Error(`Upstream API error: ${errorText.substring(0, 100)}`);
+  }
 
-  // API Routes
-  app.get("/api/health", (req, res) => {
-    res.json({ status: "ok" });
+  if (contentType && contentType.includes("application/json")) {
+    try {
+      return await response.json();
+    } catch (err) {
+      const rawText = await response.text();
+      console.error("JSON Parse Error. Raw body:", rawText);
+      throw new Error("Upstream API returned invalid JSON");
+    }
+  } else {
+    const rawText = await response.text();
+    console.error("Expected JSON but got:", contentType, "Body:", rawText);
+    throw new Error("Upstream API did not return JSON");
+  }
+}
+
+// Sanity-check for Vercel environment variables on startup
+if (process.env.VERCEL) {
+  console.log("🔍 Checking Vercel Environment Variables...");
+  const requiredKeys = ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'OPENROUTER_API_KEY', 'RESEND_API_KEY'];
+  requiredKeys.forEach(key => {
+    if (process.env[key] && process.env[key]!.length > 0) {
+      console.log(`✅ ${key} is set.`);
+    } else {
+      console.error(`❌ CRITICAL: ${key} is MISSING or empty.`);
+    }
   });
+}
+
+// API Routes
+app.get("/api/health", (req, res) => {
+  res.json({ status: "ok" });
+});
 
   // Generate Blueprint from simple query
   app.post("/api/generate-query", async (req, res) => {
@@ -339,25 +383,12 @@ async function startServer() {
     }
   });
 
-  // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const { createServer: createViteServer } = await import("vite");
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
+    const PORT = 3000;
+    const vite = await createViteServer({ server: { middlewareMode: true }, appType: "spa" });
     app.use(vite.middlewares);
-  } else {
-    // Serve static files in production
-    app.use(express.static(path.join(__dirname, "dist")));
-    app.get("*", (req, res) => {
-      res.sendFile(path.join(__dirname, "dist", "index.html"));
-    });
+    app.listen(PORT, "0.0.0.0", () => console.log(`Server running on http://localhost:${PORT}`));
   }
-
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-  });
 }
 
-startServer();
