@@ -8,7 +8,7 @@ export default function Footer() {
         <div className="md:col-span-8">
           <Link to="/" className="font-serif text-3xl mb-6 block">TheBoringStack</Link>
           <p className="text-brand-bg/60 max-w-md mb-12 leading-relaxed text-lg">
-            Creative Developer and MarTech Analyst building high-performance marketing infrastructure and generative engine optimization experiences.
+            Building reliable marketing infrastructure and digital experiences — professionally, with a wink.
           </p>
           <div className="flex gap-6">
             <a href="https://github.com/vrajeshsh" target="_blank" rel="noopener noreferrer" className="hover:text-brand-bg/40 transition-colors">
@@ -27,7 +27,7 @@ export default function Footer() {
           <h4 className="text-xs uppercase tracking-widest font-bold text-brand-bg/40 mb-8">Navigation</h4>
           <ul className="space-y-6 text-brand-bg/80 text-sm uppercase tracking-widest mb-12">
             <li><Link to="/" className="hover:text-brand-bg transition-colors">Home</Link></li>
-            <li><Link to="/services" className="hover:text-brand-bg transition-colors">Services</Link></li>
+            
             <li><Link to="/projects" className="hover:text-brand-bg transition-colors">Projects</Link></li>
             <li><Link to="/blog" className="hover:text-brand-bg transition-colors">Blog</Link></li>
             <li><Link to="/about" className="hover:text-brand-bg transition-colors">About</Link></li>

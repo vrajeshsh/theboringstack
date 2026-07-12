@@ -61,7 +61,7 @@ export default function About() {
             />
             <div className="prose prose-lg text-brand-ink/70 leading-relaxed space-y-6">
               <p>
-                I'm Vrajesh Shah, a Creative Dev and MarTech Analyst. I spend my time at the intersection of high-end design, technical precision, and marketing strategy.
+                I'm Vrajesh Shah. Building reliable marketing infrastructure and digital experiences — professionally, with a wink. I spend my time at the intersection of technical precision and marketing strategy.
               </p>
               <p>
                 I've spent my career helping brands turn complex data into meaningful customer experiences. I believe that technology should be an enabler, not a bottleneck that makes you want to pull your hair out.
@@ -75,8 +75,7 @@ export default function About() {
               <motion.a 
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
-                href="./Vrajesh_Shah_Resume_final (1).docx" 
-                download
+                href="./resume.html" 
                 className="inline-flex items-center gap-3 px-8 py-4 bg-brand-ink text-brand-bg text-xs uppercase tracking-widest font-bold hover:bg-brand-accent transition-colors cursor-pointer"
               >
                 Download Resume <Download size={14} />
