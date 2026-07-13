@@ -8,7 +8,7 @@ export default function Footer() {
         <div className="md:col-span-8">
           <Link to="/" className="font-serif text-3xl mb-6 block">TheBoringStack</Link>
           <p className="text-brand-bg/60 max-w-md mb-12 leading-relaxed text-lg">
-            Building reliable marketing infrastructure and digital experiences — professionally, with a wink.
+            Creative Developer and MarTech Analyst building high-performance marketing infrastructure and generative engine optimization experiences.
           </p>
           <div className="flex gap-6">
             <a href="https://github.com/vrajeshsh" target="_blank" rel="noopener noreferrer" className="hover:text-brand-bg/40 transition-colors">

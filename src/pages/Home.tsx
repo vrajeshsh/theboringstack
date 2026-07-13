@@ -19,7 +19,7 @@ export default function Home() {
               transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
             >
               <span className="text-xs uppercase tracking-[0.4em] text-brand-ink/60 font-bold mb-6 block">
-                Building reliable marketing infrastructure and digital experiences — professionally, with a wink
+                Creative Dev / MarTech Analyst
               </span>
               <h1 className="text-6xl md:text-8xl lg:text-9xl font-serif leading-[0.9] mb-8 tracking-tighter">
                 Vrajesh <br />

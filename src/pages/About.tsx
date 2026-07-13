@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'motion/react';
+import emailjs from '@emailjs/browser';
 import SectionHeading from '@/src/components/SectionHeading';
 import { ArrowRight, Download, Award, Briefcase, Code, Send, Mail, Share2 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
@@ -26,6 +27,9 @@ export default function About() {
   const [status, setStatus] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
   const [email, setEmail] = useState('');
   const [emailError, setEmailError] = useState('');
+  const [name, setName] = useState('');
+  const [subject, setSubject] = useState('');
+  const [message, setMessage] = useState('');
 
   const validateEmail = (email: string) => {
     const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -44,10 +48,38 @@ export default function About() {
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!validateEmail(email)) return;
-    
+
     setStatus('sending');
-    // Simulate API call
-    setTimeout(() => setStatus('success'), 1500);
+    try {
+      const serviceId = import.meta.env.VITE_EMAILJS_SERVICE_ID;
+      const templateId = import.meta.env.VITE_EMAILJS_TEMPLATE_ID;
+      const userId = import.meta.env.VITE_EMAILJS_USER_ID;
+
+      if (!serviceId || !templateId || !userId) {
+        throw new Error('EmailJS is not configured. Set VITE_EMAILJS_SERVICE_ID, VITE_EMAILJS_TEMPLATE_ID, and VITE_EMAILJS_USER_ID in your environment.');
+      }
+
+      await emailjs.send(
+        serviceId,
+        templateId,
+        {
+          from_name: name,
+          from_email: email,
+          subject,
+          message,
+        },
+        userId
+      );
+
+      setStatus('success');
+      setName('');
+      setEmail('');
+      setSubject('');
+      setMessage('');
+    } catch (err) {
+      console.error('EmailJS error:', err);
+      setStatus('error');
+    }
   };
 
   return (
@@ -61,7 +93,7 @@ export default function About() {
             />
             <div className="prose prose-lg text-brand-ink/70 leading-relaxed space-y-6">
               <p>
-                I'm Vrajesh Shah. Building reliable marketing infrastructure and digital experiences — professionally, with a wink. I spend my time at the intersection of technical precision and marketing strategy.
+                I'm Vrajesh Shah, a Creative Dev and MarTech Analyst. I spend my time at the intersection of high-end design, technical precision, and marketing strategy.
               </p>
               <p>
                 I've spent my career helping brands turn complex data into meaningful customer experiences. I believe that technology should be an enabler, not a bottleneck that makes you want to pull your hair out.
@@ -241,20 +273,18 @@ export default function About() {
                   </motion.button>
                 </motion.div>
               ) : (
-                <form 
-                  name="contact" 
-                  data-netlify="true" 
-                  method="POST"
-                  onSubmit={handleSubmit} 
+                <form
+                  onSubmit={handleSubmit}
                   className="bg-white border border-brand-ink/5 p-12 space-y-8"
                 >
-                  <input type="hidden" name="form-name" value="contact" />
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                     <div className="space-y-2">
                       <label className="text-[10px] uppercase tracking-widest font-bold text-brand-ink/40">Full Name</label>
-                      <input 
+                      <input
                         required
-                        type="text" 
+                        type="text"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
                         className="w-full border-b border-brand-ink/10 py-3 focus:border-brand-ink outline-none transition-colors font-serif text-lg"
                         placeholder="Jane Doe"
                       />
@@ -262,9 +292,9 @@ export default function About() {
                     <div className="space-y-2">
                       <label className="text-[10px] uppercase tracking-widest font-bold text-brand-ink/40">Email Address</label>
                       <div className="relative">
-                        <input 
+                        <input
                           required
-                          type="email" 
+                          type="email"
                           value={email}
                           onChange={(e) => {
                             setEmail(e.target.value);
@@ -287,23 +317,27 @@ export default function About() {
                   </div>
                   <div className="space-y-2">
                     <label className="text-[10px] uppercase tracking-widest font-bold text-brand-ink/40">Subject</label>
-                    <input 
+                    <input
                       required
-                      type="text" 
+                      type="text"
+                      value={subject}
+                      onChange={(e) => setSubject(e.target.value)}
                       className="w-full border-b border-brand-ink/10 py-3 focus:border-brand-ink outline-none transition-colors font-serif text-lg"
                       placeholder="Project Inquiry"
                     />
                   </div>
                   <div className="space-y-2">
                     <label className="text-[10px] uppercase tracking-widest font-bold text-brand-ink/40">Message</label>
-                    <textarea 
+                    <textarea
                       required
                       rows={5}
+                      value={message}
+                      onChange={(e) => setMessage(e.target.value)}
                       className="w-full border-b border-brand-ink/10 py-3 focus:border-brand-ink outline-none transition-colors font-serif text-lg resize-none"
                       placeholder="Tell me about your project..."
                     />
                   </div>
-                  <motion.button 
+                  <motion.button
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
                     disabled={status === 'sending'}
